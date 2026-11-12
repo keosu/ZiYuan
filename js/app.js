@@ -74,6 +74,42 @@
     },
   };
 
+  // ---------- 学习记录 ----------
+  // 每字：lv 熟悉度（0 未标，1–4 见 LEVELS）、v 查看次数、t 最近查看时间、r / w 答对 / 答错次数
+  const LEVELS = [
+    { lv: 1, name: "生疏", color: "#e0553a" },
+    { lv: 2, name: "初识", color: "#e2a54b" },
+    { lv: 3, name: "熟悉", color: "#4ec896" },
+    { lv: 4, name: "精通", color: "#4cc8f0" },
+  ];
+  const levelOf = (lv) => LEVELS.find((l) => l.lv === lv);
+  const study = (() => {
+    let data;
+    try { data = JSON.parse(localStorage.getItem("han.study") || "{}"); } catch { data = {}; }
+    return {
+      get: (c) => data[c] || {},
+      level: (c) => (data[c] && data[c].lv) || 0,
+      update(c, fn) {
+        const s = data[c] || (data[c] = {});
+        fn(s);
+        localStorage.setItem("han.study", JSON.stringify(data));
+        return s;
+      },
+    };
+  })();
+
+  // 答错降一级；答对升一级，最多自动升到「熟悉」，「精通」只由自己标
+  function recordAnswer(c, ok) {
+    const before = study.level(c);
+    const after = ok ? (before === 0 ? 2 : before >= 3 ? before : before + 1) : before === 0 ? 1 : Math.max(1, before - 1);
+    study.update(c, (s) => {
+      s.lv = after;
+      if (ok) s.r = (s.r || 0) + 1;
+      else s.w = (s.w || 0) + 1;
+    });
+    return { before, after };
+  }
+
   // ---------- 字形 ----------
   // 某个古文字阶段字体里没有，就不进入时间轴
   function stagesOf(d) {
@@ -142,18 +178,21 @@
   }
 
   // ---------- 字格分页（铺满可视区域，不滚动） ----------
-  function cardHTML(d) {
+  function cardHTML(d, withStats) {
     const old = stagesOf(d).find((s) => s.kind === "img");
+    const s = study.get(d.c), lv = levelOf(s.lv);
+    const note = withStats ? (s.v ? `${s.v}次` : "未看") : d.m;
     return `<a class="card" href="#/char/${d.c}">
       ${old ? `<div class="card-ancient">${glyph(d, old.id)}</div>` : ""}
       ${favs.has(d.c) ? '<i class="card-fav">♥</i>' : ""}
       <div class="card-char">${d.c}</div>
-      <div class="card-meta"><b>${d.py}</b>${d.m ? `<span>${d.m}</span>` : ""}</div>
+      <div class="card-meta"><b>${d.py}</b>${note ? `<span>${note}</span>` : ""}</div>
+      ${lv ? `<i class="card-lv" style="--lc:${lv.color}" title="${lv.name}"></i>` : ""}
     </a>`;
   }
 
   // 按字格容器的实际尺寸决定一页放几列几行
-  function fillGrid(list, state) {
+  function fillGrid(list, state, withStats) {
     const grid = $("#grid");
     if (!grid || grid.clientWidth < 10 || grid.clientHeight < 10) return;
     const h = grid.clientHeight;
@@ -166,8 +205,8 @@
     state.page = Math.min(Math.max(state.page, 0), pages - 1);
     const slice = list.slice(state.page * per, state.page * per + per);
     grid.innerHTML = slice.length
-      ? slice.map(cardHTML).join("")
-      : `<div class="empty"><div class="big">无</div><p>没有找到相关汉字</p></div>`;
+      ? slice.map((d) => cardHTML(d, withStats)).join("")
+      : `<div class="empty"><div class="big">无</div><p>${state.emptyText || "没有找到相关汉字"}</p></div>`;
     const label = $("#pgLabel"), prev = $("#pgPrev"), next = $("#pgNext");
     if (label) label.innerHTML = list.length ? `<b>${state.page + 1}</b> / ${pages} 页 · ${list.length} 字` : "0 字";
     if (prev) prev.disabled = state.page <= 0;
@@ -313,23 +352,75 @@
   }
 
   // ---------- 收藏 ----------
-  const favState = { page: 0 };
+  // 筛选：全部收藏、按熟悉度、未标，以及不限收藏的「答错过」
+  const favState = { page: 0, filter: "all", sort: "weak" };
+  const SORTS = [
+    { id: "weak", name: "生疏优先" },
+    { id: "recent", name: "最近查看" },
+    { id: "views", name: "查看最多" },
+  ];
   function favList() { return favs.list().map((c) => byChar[c]).filter(Boolean); }
-  function renderFavGrid() { fillGrid(favList(), favState); }
+  function wrongList() { return ALL.filter((d) => study.get(d.c).w); }
+
+  function favFilters() {
+    const list = favList();
+    const count = (lv) => list.filter((d) => study.level(d.c) === lv).length;
+    return [
+      { id: "all", name: "全部", n: list.length },
+      ...LEVELS.map((l) => ({ id: String(l.lv), name: l.name, n: count(l.lv), color: l.color })),
+      { id: "0", name: "未标", n: count(0) },
+      { id: "wrong", name: "答错过", n: wrongList().length, color: "#e0553a" },
+    ];
+  }
+
+  function favView() {
+    const f = favState.filter;
+    let list = f === "wrong" ? wrongList() : favList();
+    if (f !== "all" && f !== "wrong") list = list.filter((d) => study.level(d.c) === +f);
+    const weakKey = (d) => { const lv = study.level(d.c); return lv === 0 ? 2.5 : lv; };
+    const sorters = {
+      weak: (a, b) => weakKey(a) - weakKey(b) || (study.get(b.c).w || 0) - (study.get(a.c).w || 0) || (study.get(b.c).t || 0) - (study.get(a.c).t || 0),
+      recent: (a, b) => (study.get(b.c).t || 0) - (study.get(a.c).t || 0),
+      views: (a, b) => (study.get(b.c).v || 0) - (study.get(a.c).v || 0),
+    };
+    return list.slice().sort(sorters[favState.sort]);
+  }
+
+  function renderFavGrid() {
+    favState.emptyText = favState.filter === "wrong" ? "还没有答错过的字" : "这一类还没有字";
+    fillGrid(favView(), favState, true);
+  }
 
   function renderFav() {
-    const list = favList();
-    const head = `<header class="top"><div class="page-title"><h2>收藏</h2><span>${list.length} 字</span></div><span class="spacer"></span>${fsBtn()}</header>`;
-    if (!list.length) {
-      view.innerHTML = `<div class="fit no-chips">${head}<div class="center-empty"><div class="big">藏</div><p>在汉字详情页点 ♡，把喜欢的字收进来</p><a class="btn-primary" href="#/">去翻翻六卷</a></div></div>`;
+    const filters = favFilters();
+    const sort = SORTS.find((s) => s.id === favState.sort);
+    const head = `<header class="top"><div class="page-title"><h2>收藏</h2><span>${filters[0].n} 字</span></div><span class="spacer"></span>
+      <button class="sort-btn" id="sortBtn" title="切换排序">${sort.name}</button>${fsBtn()}</header>`;
+    if (!filters[0].n && !filters[filters.length - 1].n) {
+      view.innerHTML = `<div class="fit no-chips">${head}<div class="center-empty"><div class="big">藏</div><p>在汉字详情页点 ♡ 收藏，标上熟悉度，<br>这里就会按你的掌握情况排好</p><a class="btn-primary" href="#/">去翻翻六卷</a></div></div>`;
+      $("#sortBtn").hidden = true;
       return;
     }
     view.innerHTML = `
-      <div class="fit no-chips">
+      <div class="fit">
         ${head}
+        <div class="chips">${filters.map((f) => `<button class="chip lv-chip${f.id === favState.filter ? " active" : ""}" data-f="${f.id}"${f.color ? ` style="--c:${f.color}"` : ""}>${f.color ? '<i class="dot"></i>' : ""}${f.name}<em>${f.n}</em></button>`).join("")}</div>
         <div class="grid" id="grid"></div>
         ${pagerHTML()}
       </div>`;
+    $$(".lv-chip").forEach((el) => el.onclick = () => {
+      favState.filter = el.dataset.f;
+      favState.page = 0;
+      $$(".lv-chip").forEach((c) => c.classList.toggle("active", c === el));
+      renderFavGrid();
+    });
+    $("#sortBtn").onclick = (e) => {
+      const i = SORTS.findIndex((s) => s.id === favState.sort);
+      favState.sort = SORTS[(i + 1) % SORTS.length].id;
+      e.currentTarget.textContent = SORTS.find((s) => s.id === favState.sort).name;
+      favState.page = 0;
+      renderFavGrid();
+    };
     $("#pgPrev").onclick = () => { favState.page--; renderFavGrid(); };
     $("#pgNext").onclick = () => { favState.page++; renderFavGrid(); };
     relayout = renderFavGrid;
@@ -343,7 +434,7 @@
   // 上一个 / 下一个沿着进入详情前所在的列表走
   function neighborList(d) {
     let list = null;
-    if (page === "fav") list = favList();
+    if (page === "fav") list = favView();
     else if (page === "home" && homeState.mode === "list") list = homeList();
     if (!list || !list.includes(d)) list = volById.qimeng.set.has(d.c) ? volById.qimeng.list : ALL;
     return list;
@@ -353,6 +444,7 @@
     stopPlay();
     Object.assign(det, { d, i: 0, mode: "evo", stages: stagesOf(d), shown: 0, strokeN: 0 });
     const list = neighborList(d), idx = list.indexOf(d);
+    study.update(d.c, (s) => { s.v = (s.v || 0) + 1; s.t = Date.now(); });
     const prev = list[(idx - 1 + list.length) % list.length], next = list[(idx + 1) % list.length];
     const vol = volumeOf(d);
     const cells = [["拼音", d.py], ["卷目", vol ? vol.name : "—"]];
@@ -388,6 +480,11 @@
         </div>
         <p class="stage-desc" id="stageDesc"></p>
         <div class="info-row" style="grid-template-columns:repeat(${cells.length},1fr)">${cells.map(([k, v], i) => `<div class="info${i === 0 ? " py" : ""}"><small>${k}</small><b>${v}</b></div>`).join("")}</div>
+        <div class="mastery">
+          <span class="ms-label">熟悉度</span>
+          <div class="ms-levels">${LEVELS.map((l) => `<button data-lv="${l.lv}" style="--lc:${l.color}">${l.name}</button>`).join("")}</div>
+          <span class="ms-stat" id="msStat"></span>
+        </div>
         ${d.s ? `<div class="block story"><h4>字源故事</h4><p>${d.s}</p></div>` : ""}
         <div class="block forms"><h4>字形一览</h4><div class="forms-grid" style="--n:${det.stages.length}">
           ${det.stages.map((s, i) => `<button class="fm" data-i="${i}" style="--sc:${ACCENTS[s.id]}"><i>${glyph(d, s.id)}</i><small>${s.name}</small></button>`).join("")}
@@ -402,6 +499,12 @@
     };
     $("#modeEvo").onclick = enterEvo;
     $("#modeStroke").onclick = enterStroke;
+    $$(".ms-levels button", detail).forEach((el) => el.onclick = () => {
+      const lv = +el.dataset.lv;
+      study.update(d.c, (s) => { s.lv = s.lv === lv ? 0 : lv; });
+      renderMastery();
+    });
+    renderMastery();
     $$(".fm", detail).forEach((el) => el.onclick = () => {
       if (det.mode === "stroke") enterEvo();
       stopPlay();
@@ -418,6 +521,14 @@
     setStage(0);
     layoutForms();
     setTimeout(() => { if (det.d === d && det.mode === "evo" && !det.timer && det.i === 0) togglePlay(); }, 700);
+  }
+
+  function renderMastery() {
+    const s = study.get(det.d.c);
+    $$(".ms-levels button", detail).forEach((b) => b.classList.toggle("on", +b.dataset.lv === (s.lv || 0)));
+    const parts = [`看过 ${s.v || 0} 次`];
+    if (s.r || s.w) parts.push(`答对 ${s.r || 0} · 错 ${s.w || 0}`);
+    $("#msStat").textContent = parts.join(" · ");
   }
 
   // 字形一览：按面板实际尺寸挑列数，让每个字形尽量大
@@ -698,8 +809,14 @@
       Object.assign(this, { round: 0, score: 0, streak: 0, best: 0, correct: 0 });
       this.next();
     },
+    // 约四成题目从「生疏」或答错多于答对的字里出
     pick() {
-      const d = QUIZ_POOL[Math.floor(Math.random() * QUIZ_POOL.length)];
+      const weak = ALL.filter((x) => {
+        const s = study.get(x.c);
+        return (s.lv === 1 || (s.w || 0) > (s.r || 0)) && stagesOf(x).some((st) => st.kind === "img") && x !== (this.q && this.q.d);
+      });
+      const pool = weak.length && Math.random() < 0.4 ? weak : QUIZ_POOL;
+      const d = pool[Math.floor(Math.random() * pool.length)];
       const ancient = stagesOf(d).filter((s) => s.kind === "img");
       const stage = ancient[Math.floor(Math.random() * ancient.length)].id;
       const opts = [d];
@@ -740,13 +857,18 @@
       if (ok) { this.score += 10 + this.streak * 2; this.streak++; this.best = Math.max(this.best, this.streak); this.correct++; }
       else this.streak = 0;
       this.round++;
+      const { before, after } = recordAnswer(d.c, ok);
+      const lvName = (lv) => (levelOf(lv) || { name: "未标" }).name;
+      const lvNote = before === after
+        ? `熟悉度 <b style="color:${levelOf(after).color}">${lvName(after)}</b>`
+        : `熟悉度 ${lvName(before)} → <b style="color:${levelOf(after).color}">${lvName(after)}</b>`;
       $(".score").innerHTML = this.scoreHTML();
       $(".progress i").style.width = `${(this.round / this.total) * 100}%`;
       setTimeout(() => {
         if (!$(".options")) return;
         $(".options").style.display = "none";
         $("#fb").innerHTML = `<div class="feedback ${ok ? "ok" : "no"}">
-          <div class="fb-main"><b class="fb-char">${d.c}</b><div><div class="fb-title">${ok ? "答对了" : "答案是这个字"}</div><div class="fb-py">${d.py}${d.m ? " · " + d.m : ""}</div></div></div>
+          <div class="fb-main"><b class="fb-char">${d.c}</b><div><div class="fb-title">${ok ? "答对了" : "答案是这个字"}</div><div class="fb-py">${d.py}${d.m ? " · " + d.m : ""}</div><div class="fb-lv">${lvNote}</div></div></div>
           ${d.s ? `<p class="fb-story">${d.s}</p>` : ""}
           <div class="row"><a class="btn-ghost" href="#/char/${d.c}">看演化</a><button class="btn-primary" id="nextQ">${this.round >= this.total ? "查看成绩" : "下一题"}</button></div></div>`;
         $("#nextQ").onclick = () => this.next();
