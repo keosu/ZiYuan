@@ -34,6 +34,7 @@
     search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>',
     expand: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
     collapse: '<svg viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
+    speaker: '<svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
   };
 
   // ---------- 全屏 ----------
@@ -136,6 +137,54 @@
     return VOLUMES.find((v) => v.set.has(d.c));
   }
 
+  // ---------- 拼音 / 同音字 ----------
+  // 音节键去掉声调、ü 记作 v；声调 1–4，轻声 5
+  const TONE_MARK = { "\u0304": 1, "\u0301": 2, "\u030c": 3, "\u0300": 4 };
+  function sylOf(py) {
+    return py.toLowerCase().normalize("NFD").replace(/u\u0308/g, "v").replace(/[\u0300-\u036f]/g, "");
+  }
+  function toneOf(py) {
+    const m = py.normalize("NFD").match(/[\u0304\u0301\u030c\u0300]/);
+    return m ? TONE_MARK[m[0]] : 5;
+  }
+  const showSyl = (s) => s.replace(/v/g, "ü");
+  const bySyl = {};
+  ALL.forEach((d) => { (bySyl[sylOf(d.py)] ||= []).push(d); });
+  const SYLLABLES = Object.keys(bySyl).sort();
+
+  // ---------- 发音 ----------
+  // 用系统自带的中文语音朗读；没有中文语音的设备由系统按 zh-CN 尽量处理
+  const canSpeak = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+  let zhVoice = null;
+  function pickVoice() {
+    const vs = speechSynthesis.getVoices();
+    zhVoice = vs.find((v) => /zh[-_]CN/i.test(v.lang)) || vs.find((v) => /^zh/i.test(v.lang)) || null;
+  }
+  if (canSpeak) {
+    pickVoice();
+    speechSynthesis.addEventListener?.("voiceschanged", pickVoice);
+  }
+  function speak(text, btn) {
+    if (!canSpeak || !text) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "zh-CN";
+    if (zhVoice) u.voice = zhVoice;
+    u.rate = 0.75;
+    if (btn) {
+      btn.classList.add("speaking");
+      u.onend = u.onerror = () => btn.classList.remove("speaking");
+    }
+    speechSynthesis.speak(u);
+  }
+  function speakBtn(text, extra = "") {
+    return canSpeak ? `<button class="speak-btn ${extra}" data-say="${text}" aria-label="朗读" title="朗读">${ICON.speaker}</button>` : "";
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest(".speak-btn");
+    if (b) { e.preventDefault(); e.stopPropagation(); speak(b.dataset.say, b); }
+  });
+
   const LUNAR_DAY = "一二三四五六七八九十";
   function lunarDay(n) {
     if (n === 10) return "初十";
@@ -155,26 +204,42 @@
   }
 
   // ---------- 路由 ----------
-  let page = null, heroTimer = null, relayout = null;
+  let page = null, heroTimer = null, relayout = null, lastHash = "";
   function route() {
     const [, a = "", b = ""] = (location.hash.slice(1) || "/").split("/");
-    const ch = decodeURIComponent(b);
-    if (a === "char" && byChar[ch]) {
+    const key = decodeURIComponent(b);
+    if (a === "char" && byChar[key]) {
       if (!page) renderPage("home");
-      openDetail(byChar[ch]);
-      return;
+      openDetail(byChar[key]);
+    } else if (a === "py" && bySyl[key]) {
+      // 记下从哪来，「返回」时回到那里；同音字页之间切换不覆盖
+      if (page !== "py") {
+        pyState.from = lastHash || "#/";
+        pyState.base = page || "home";
+      }
+      if (pyState.syl !== key) Object.assign(pyState, { syl: key, tone: 0, page: 0 });
+      closeDetail();
+      renderPage("py", true);
+    } else {
+      closeDetail();
+      renderPage(["quiz", "fav"].includes(a) ? a : "home");
     }
-    closeDetail();
-    renderPage(["quiz", "fav"].includes(a) ? a : "home");
+    lastHash = location.hash;
   }
 
-  function renderPage(name) {
-    if (page === name && name !== "fav") return;
+  function renderPage(name, force) {
+    if (!force && page === name && name !== "fav") return;
     page = name;
     clearInterval(heroTimer);
     relayout = null;
-    $$(".tabbar a").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
-    ({ home: renderHome, quiz: () => quiz.start(), fav: renderFav })[name]();
+    const tab = name === "py" ? "home" : name;
+    $$(".tabbar a").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
+    ({ home: renderHome, quiz: () => quiz.start(), fav: renderFav, py: renderPy })[name]();
+  }
+
+  function pageHash() {
+    if (page === "py") return `#/py/${pyState.syl}`;
+    return `#/${page === "home" ? "" : page}`;
   }
 
   // ---------- 字格分页（铺满可视区域，不滚动） ----------
@@ -427,6 +492,67 @@
     renderFavGrid();
   }
 
+  // ---------- 同音字 ----------
+  const pyState = { syl: "", tone: 0, page: 0, from: "#/", base: "home" };
+  function pyList() {
+    const list = bySyl[pyState.syl] || [];
+    return pyState.tone ? list.filter((d) => toneOf(d.py) === pyState.tone) : list;
+  }
+  function renderPyGrid() { fillGrid(pyList(), pyState); }
+
+  function renderPy() {
+    const syl = pyState.syl, list = bySyl[syl] || [], init = initialOf(syl);
+    const sample = (t) => list.find((d) => toneOf(d.py) === t);
+    const tones = [1, 2, 3, 4, 5].filter(sample);
+    const inits = INITIALS.filter((k) => SYLLABLES.some((s) => initialOf(s) === k));
+    const syls = SYLLABLES.filter((s) => initialOf(s) === init);
+    const first = (pyList()[0] || list[0]).c;
+    view.innerHTML = `
+      <div class="fit pyfit">
+        <header class="top">
+          <button class="back-link" id="pyBack">${ICON.back}返回</button>
+          <div class="page-title"><h2 class="py-title">${showSyl(syl)}</h2><span>同音 ${list.length} 字</span></div>
+          ${speakBtn(first, "big")}
+          <span class="spacer"></span>
+          ${fsBtn()}
+        </header>
+        <div class="chips tone-row">
+          <button class="chip${pyState.tone ? "" : " active"}" data-t="0">全部声调</button>
+          ${tones.map((t) => `<button class="chip tone-chip${pyState.tone === t ? " active" : ""}" data-t="${t}">${sample(t).py}<em>${list.filter((d) => toneOf(d.py) === t).length}</em></button>`).join("")}
+        </div>
+        <div class="chips init-row">${inits.map((k) => `<button class="chip${k === init ? " active" : ""}" data-i="${k}">${k}</button>`).join("")}</div>
+        <div class="chips syl-row">${syls.map((s) => `<button class="chip syl-chip${s === syl ? " active" : ""}" data-s="${s}">${showSyl(s)}<em>${bySyl[s].length}</em></button>`).join("")}</div>
+        <div class="grid" id="grid"></div>
+        ${pagerHTML()}
+      </div>`;
+    const go = (s) => location.replace(`#/py/${s}`);
+    $("#pyBack").onclick = () => {
+      const to = pyState.from || "#/";
+      if (to.startsWith("#/char/")) renderPage(pyState.base === "py" ? "home" : pyState.base, true);
+      location.hash = to;
+    };
+    $$(".tone-row .chip").forEach((el) => el.onclick = () => {
+      pyState.tone = +el.dataset.t;
+      pyState.page = 0;
+      $$(".tone-row .chip").forEach((c) => c.classList.toggle("active", c === el));
+      const sb = $(".pyfit .speak-btn");
+      if (sb) sb.dataset.say = (pyList()[0] || list[0]).c;
+      renderPyGrid();
+    });
+    $$(".init-row .chip").forEach((el) => el.onclick = () => {
+      if (el.dataset.i !== init) go(SYLLABLES.find((s) => initialOf(s) === el.dataset.i));
+    });
+    $$(".syl-row .chip").forEach((el) => el.onclick = () => { if (el.dataset.s !== syl) go(el.dataset.s); });
+    ["init-row", "syl-row"].forEach((cls) => {
+      const row = $(`.${cls}`), on = $(`.${cls} .active`);
+      if (row && on) row.scrollLeft = on.offsetLeft - row.offsetLeft - row.clientWidth / 2 + on.offsetWidth / 2;
+    });
+    $("#pgPrev").onclick = () => { pyState.page--; renderPyGrid(); };
+    $("#pgNext").onclick = () => { pyState.page++; renderPyGrid(); };
+    relayout = renderPyGrid;
+    renderPyGrid();
+  }
+
   // ---------- 详情 ----------
   const det = { d: null, i: 0, timer: null, mode: "evo", stages: [], shown: 0, strokeN: 0 };
   const strokeCache = {};
@@ -435,6 +561,7 @@
   function neighborList(d) {
     let list = null;
     if (page === "fav") list = favView();
+    else if (page === "py") list = pyList();
     else if (page === "home" && homeState.mode === "list") list = homeList();
     if (!list || !list.includes(d)) list = volById.qimeng.set.has(d.c) ? volById.qimeng.list : ALL;
     return list;
@@ -453,8 +580,8 @@
     detail.innerHTML = `
       <div class="detail-bg"></div>
       <header class="detail-top">
-        <a class="back-link" href="#/${page === "home" ? "" : page}">${ICON.back}返回</a>
-        <div class="dt-title"><b>${d.c}</b><em>${d.py}</em>${d.m ? `<span>${d.m}</span>` : ""}</div>
+        <a class="back-link" href="${pageHash()}">${ICON.back}返回</a>
+        <div class="dt-title"><b>${d.c}</b><a class="py-link" href="#/py/${sylOf(d.py)}" title="查看同音字">${d.py}</a>${speakBtn(d.c)}${d.m ? `<span>${d.m}</span>` : ""}</div>
         <button class="icon-btn fav-btn${favs.has(d.c) ? " on" : ""}" id="favBtn" aria-label="收藏">${ICON.heart}</button>
         ${fsBtn()}
       </header>
@@ -479,7 +606,9 @@
           <button class="icon-btn" id="nextStage" aria-label="下一步">${ICON.next}</button>
         </div>
         <p class="stage-desc" id="stageDesc"></p>
-        <div class="info-row" style="grid-template-columns:repeat(${cells.length},1fr)">${cells.map(([k, v], i) => `<div class="info${i === 0 ? " py" : ""}"><small>${k}</small><b>${v}</b></div>`).join("")}</div>
+        <div class="info-row" style="grid-template-columns:repeat(${cells.length},1fr)">${cells.map(([k, v], i) => i === 0
+          ? `<a class="info py" href="#/py/${sylOf(d.py)}" title="查看同音字"><small>${k}<i>同音 ${bySyl[sylOf(d.py)].length} ›</i></small><b>${v}</b></a>`
+          : `<div class="info"><small>${k}</small><b>${v}</b></div>`).join("")}</div>
         <div class="mastery">
           <span class="ms-label">熟悉度</span>
           <div class="ms-levels">${LEVELS.map((l) => `<button data-lv="${l.lv}" style="--lc:${l.color}">${l.name}</button>`).join("")}</div>
@@ -568,6 +697,7 @@
     detail.setAttribute("aria-hidden", "true");
     if (page === "fav") renderFav();
     else if (page === "home" && $("#grid")) renderGrid();
+    else if (page === "py" && $("#grid")) renderPyGrid();
   }
 
   function setStage(i) {
@@ -790,13 +920,14 @@
       if (e.key === "ArrowRight") step(1);
       else if (e.key === "ArrowLeft") step(-1);
       else if (e.key === " ") { e.preventDefault(); togglePlay(); }
-      else if (e.key === "Escape") location.hash = `#/${page === "home" ? "" : page}`;
+      else if (e.key === "Escape") location.hash = pageHash();
       return;
     }
     if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && document.activeElement?.tagName !== "INPUT") {
       const dir = e.key === "ArrowRight" ? 1 : -1;
       if (page === "home" && $("#grid")) { homeState.page += dir; renderGrid(); }
       else if (page === "fav" && $("#grid")) { favState.page += dir; renderFavGrid(); }
+      else if (page === "py" && $("#grid")) { pyState.page += dir; renderPyGrid(); }
     }
   });
 
@@ -868,7 +999,7 @@
         if (!$(".options")) return;
         $(".options").style.display = "none";
         $("#fb").innerHTML = `<div class="feedback ${ok ? "ok" : "no"}">
-          <div class="fb-main"><b class="fb-char">${d.c}</b><div><div class="fb-title">${ok ? "答对了" : "答案是这个字"}</div><div class="fb-py">${d.py}${d.m ? " · " + d.m : ""}</div><div class="fb-lv">${lvNote}</div></div></div>
+          <div class="fb-main"><b class="fb-char">${d.c}</b><div><div class="fb-title">${ok ? "答对了" : "答案是这个字"}</div><div class="fb-py">${d.py}${speakBtn(d.c)}${d.m ? " · " + d.m : ""}</div><div class="fb-lv">${lvNote}</div></div></div>
           ${d.s ? `<p class="fb-story">${d.s}</p>` : ""}
           <div class="row"><a class="btn-ghost" href="#/char/${d.c}">看演化</a><button class="btn-primary" id="nextQ">${this.round >= this.total ? "查看成绩" : "下一题"}</button></div></div>`;
         $("#nextQ").onclick = () => this.next();

@@ -195,6 +195,27 @@ em { font-style: normal; }
 .lv-chip.active { background: var(--c, var(--gold)); border-color: var(--c, var(--gold)); }
 .lv-chip.active .dot { background: #1a0f08; }
 .lv-chip.active em { color: rgba(26,15,8,.6); }
+
+/* 同音字页：声调 / 声母 / 音节三排切换，横屏时声调并入顶栏 */
+.fit.pyfit { grid-template-rows: auto auto auto auto minmax(0, 1fr) auto; }
+.py-title { font-family: var(--sans) !important; font-weight: 500 !important; letter-spacing: 1px !important; color: var(--gold); font-size: 26px !important; }
+.tone-chip, .syl-chip { display: inline-flex; align-items: baseline; gap: 5px; }
+.tone-chip { font-size: 15px; }
+.tone-chip em, .syl-chip em { font-size: 11px; color: var(--faint); }
+.chip.active em { color: rgba(26,15,8,.6); }
+.init-row .chip { min-width: 40px; }
+@media (orientation: landscape) {
+  .fit.pyfit { grid-template-rows: auto auto auto minmax(0, 1fr) auto; }
+  .fit.pyfit .top { grid-row: 1; grid-column: 1; }
+  .fit.pyfit .tone-row { grid-row: 1; grid-column: 1; justify-self: end; align-self: center; margin-right: 50px; max-width: calc(100% - 340px); }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .fit.pyfit { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+  .fit.pyfit .top, .fit.pyfit .tone-row { grid-column: 1 / -1; }
+  .fit.pyfit .init-row { grid-row: 2; grid-column: 1; }
+  .fit.pyfit .syl-row { grid-row: 2; grid-column: 2; }
+  .fit.pyfit .grid, .fit.pyfit .pager { grid-column: 1 / -1; }
+}
 .pager { display: flex; align-items: center; justify-content: center; gap: 14px; }
 .pager span { min-width: 140px; text-align: center; font-size: 12px; color: var(--muted); letter-spacing: 1px; font-variant-numeric: tabular-nums; }
 .pager span b { color: var(--text); font-weight: 500; }
@@ -214,7 +235,10 @@ em { font-style: normal; }
 .detail-top { grid-area: head; position: relative; display: flex; align-items: center; gap: 8px; }
 .dt-title { flex: 1; min-width: 0; display: flex; justify-content: center; align-items: baseline; gap: 8px; font-size: 13px; color: var(--muted); letter-spacing: 1px; white-space: nowrap; overflow: hidden; }
 .dt-title b { font-family: var(--serif); font-size: 22px; font-weight: 900; color: var(--text); }
-.dt-title em { font-size: 19px; font-weight: 500; color: var(--gold); letter-spacing: .5px; }
+.dt-title em, .py-link { font-size: 19px; font-weight: 500; font-style: normal; color: var(--gold); letter-spacing: .5px; }
+.py-link { border-bottom: 1px dashed rgba(226,189,114,.45); transition: .2s; }
+.py-link:hover { color: #f5d48e; border-bottom-color: currentColor; }
+.dt-title .speak-btn { align-self: center; margin-left: -4px; }
 .dt-title span { overflow: hidden; text-overflow: ellipsis; }
 
 .stage-wrap { grid-area: stage; container-type: size; position: relative; min-height: 0; display: grid; grid-template-columns: 60px minmax(0, 1fr) 60px; align-items: center; gap: 4px; }
@@ -294,6 +318,23 @@ em { font-style: normal; }
 .info small { display: block; font-size: 10px; color: var(--muted); letter-spacing: 2px; }
 .info b { display: block; font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .info.py b { font-size: 18px; line-height: 1.2; color: var(--gold); }
+.info.py { transition: .2s var(--ease); }
+.info.py:hover { border-color: rgba(226,189,114,.45); background: var(--panel-2); }
+.info.py small { display: flex; justify-content: space-between; gap: 4px; }
+.info.py small i { font-style: normal; letter-spacing: 0; color: var(--gold); opacity: .75; white-space: nowrap; }
+
+/* 朗读按钮 */
+.speak-btn { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; vertical-align: middle;
+  color: var(--gold); background: rgba(226,189,114,.1); border: 1px solid rgba(226,189,114,.25); transition: .2s var(--ease); }
+.speak-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.speak-btn svg path:first-child { fill: currentColor; }
+.speak-btn:hover { background: rgba(226,189,114,.2); }
+.speak-btn.big { width: 40px; height: 40px; border-radius: 13px; }
+.speak-btn.big svg { width: 20px; height: 20px; }
+.speak-btn.speaking { animation: speakPulse 1s ease-in-out infinite; }
+@keyframes speakPulse { 50% { box-shadow: 0 0 0 6px rgba(226,189,114,.15); background: rgba(226,189,114,.28); } }
+.fb-py .speak-btn { width: 24px; height: 24px; margin: 0 4px; }
+.fb-py .speak-btn svg { width: 14px; height: 14px; }
 
 .mastery { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ms-label { flex: none; font-size: 10px; letter-spacing: 2px; color: var(--muted); }
