@@ -1,0 +1,86 @@
+// 字形演化阶段：前三个阶段使用真实古文字图片（Wikimedia Commons / 古汉字字形项目），后四个用字体渲染
+window.HAN_STAGES = [
+  { id: "oracle", name: "甲骨文", era: "商", year: "约前1300年", kind: "img",
+    desc: "刻在龟甲兽骨上，用于占卜记事，线条细瘦、多方折。" },
+  { id: "bronze", name: "金文", era: "西周", year: "约前1000年", kind: "img",
+    desc: "铸刻在青铜器上，笔画丰腴厚重，象形味浓。" },
+  { id: "seal", name: "小篆", era: "秦", year: "前221年", kind: "img",
+    desc: "秦统一文字，线条匀称圆转，结构规整。" },
+  { id: "clerical", name: "隶书", era: "汉", year: "约前200年", kind: "font",
+    desc: "「隶变」化圆为方、化曲为直，是古今文字的分水岭。" },
+  { id: "regular", name: "楷书", era: "魏晋", year: "约200年", kind: "font",
+    desc: "笔画平直、结构严谨，「楷模」之意，沿用至今。" },
+  { id: "running", name: "行书", era: "东晋", year: "约350年", kind: "font",
+    desc: "介于楷草之间，书写流畅，兼顾易认。" },
+  { id: "modern", name: "简化字", era: "现代", year: "1956年", kind: "font",
+    desc: "《汉字简化方案》推行，笔画更少、易写易认。" },
+];
+
+// 六卷由浅入深，后一卷包含前一卷。size 按 HAN_RANK 字频截取；启蒙卷是带字源故事的精选字。
+// mark / markStage：卷面上作印记的古字
+window.HAN_VOLUMES = [
+  { id: "qimeng", no: "卷一", name: "启蒙", sub: "象形本字", note: "最早的象形字，附字源故事", mark: "子", markStage: "oracle", color: "#d4553a" },
+  { id: "shiding", no: "卷二", name: "识丁", sub: "最常见三百字", size: 300, mark: "丁", markStage: "oracle", color: "#c98a3b" },
+  { id: "qianwen", no: "卷三", name: "千文", sub: "常用一千字", size: 1000, mark: "千", markStage: "bronze", color: "#bfa356" },
+  { id: "tongwen", no: "卷四", name: "通文", sub: "常用二千五百字", size: 2500, mark: "文", markStage: "bronze", color: "#4e9e83" },
+  { id: "bogu", no: "卷五", name: "博古", sub: "次常用与繁体", size: 3600, mark: "古", markStage: "seal", color: "#4a82b0" },
+  { id: "shuowen", no: "卷六", name: "说文", sub: "古文字全集", mark: "說", markStage: "seal", color: "#8367b0" },
+];
+
+// c: 简体  t: 繁体/古字形查找用  py: 拼音  m: 释义  cat: 分类  type: 造字法  s: 字源故事
+window.HAN_DATA = [
+  { c: "人", py: "rén", m: "人类", cat: "body", type: "象形", s: "像侧身站立、垂臂躬身的人形，是最早的「人」的写照。" },
+  { c: "大", py: "dà", m: "大小的大", cat: "body", type: "象形", s: "像一个正面站立、张开双臂双腿的人，用人的舒展姿态表示「大」。" },
+  { c: "女", py: "nǚ", m: "女子", cat: "body", type: "象形", s: "像一位双手交叉于胸前、屈膝跪坐的女子。" },
+  { c: "子", py: "zǐ", m: "孩子", cat: "body", type: "象形", s: "像襁褓中的婴儿：头大，双臂张开，双腿裹在一起。" },
+  { c: "口", py: "kǒu", m: "嘴巴", cat: "body", type: "象形", s: "像一张张开的嘴巴。" },
+  { c: "目", py: "mù", m: "眼睛", cat: "body", type: "象形", s: "像一只眼睛，早期横写，后来为适应竖排书写而竖立成「目」。" },
+  { c: "耳", py: "ěr", m: "耳朵", cat: "body", type: "象形", s: "像人耳的轮廓，可见耳廓与耳垂。" },
+  { c: "手", py: "shǒu", m: "手掌", cat: "body", type: "象形", s: "像张开五指的手掌，中间一竖是手臂。" },
+  { c: "足", py: "zú", m: "脚", cat: "body", type: "象形", s: "上部的「口」像膝盖，下部的「止」像脚掌，合起来就是腿脚。" },
+  { c: "心", py: "xīn", m: "心脏", cat: "body", type: "象形", s: "像心脏的形状，中间的笔画表示心房与心室。" },
+  { c: "首", py: "shǒu", m: "头", cat: "body", type: "象形", s: "像带有头发和眼睛的头部，本义是头，引申为第一、首领。" },
+  { c: "自", py: "zì", m: "鼻子 → 自己", cat: "body", type: "象形", s: "像人的鼻子，本义是鼻。人说「我」时常指着鼻子，于是引申为「自己」。" },
+
+  { c: "日", py: "rì", m: "太阳", cat: "nature", type: "象形", s: "像圆圆的太阳，中间一点表示太阳的光芒与实体。" },
+  { c: "月", py: "yuè", m: "月亮", cat: "nature", type: "象形", s: "像一弯残月——月亮常缺少圆，以此与「日」区分。" },
+  { c: "山", py: "shān", m: "山峰", cat: "nature", type: "象形", s: "像三座并立的山峰，中间最高。" },
+  { c: "水", py: "shuǐ", m: "水流", cat: "nature", type: "象形", s: "中间像蜿蜒的水流，两侧的点是飞溅的水花。" },
+  { c: "火", py: "huǒ", m: "火焰", cat: "nature", type: "象形", s: "像熊熊燃烧、向上跳动的火焰。" },
+  { c: "雨", py: "yǔ", m: "下雨", cat: "nature", type: "象形", s: "上面一横是天，下面的点是从云中落下的雨滴。" },
+  { c: "云", t: "云", py: "yún", m: "云朵", cat: "nature", type: "象形", s: "像天空中回旋卷曲的云气。后加「雨」作「雲」，简化后又回到了最初的「云」。" },
+  { c: "川", py: "chuān", m: "河流", cat: "nature", type: "象形", s: "像两岸之间流淌的河水。" },
+  { c: "土", py: "tǔ", m: "泥土", cat: "nature", type: "象形", s: "像地面上隆起的一个土堆。" },
+  { c: "石", py: "shí", m: "石头", cat: "nature", type: "象形", s: "像山崖（厂）下滚落的一块石头（口）。" },
+  { c: "气", py: "qì", m: "云气", cat: "nature", type: "象形", s: "像天空中飘浮流动的三条云气。" },
+
+  { c: "马", t: "馬", py: "mǎ", m: "马", cat: "animal", type: "象形", s: "像一匹侧立的马：长脸、飘扬的鬃毛、四条腿和尾巴。" },
+  { c: "牛", py: "niú", m: "牛", cat: "animal", type: "象形", s: "像正面的牛头，突出一对向上弯曲的牛角。" },
+  { c: "羊", py: "yáng", m: "羊", cat: "animal", type: "象形", s: "像正面的羊头，一对向下弯曲的羊角是最大特征。" },
+  { c: "鱼", t: "魚", py: "yú", m: "鱼", cat: "animal", type: "象形", s: "像一条鱼，有头、带鳞的身体和分叉的尾巴。" },
+  { c: "鸟", t: "鳥", py: "niǎo", m: "鸟", cat: "animal", type: "象形", s: "像一只侧立的鸟，可见尖喙、羽翼和爪子。" },
+  { c: "龟", t: "龜", py: "guī", m: "乌龟", cat: "animal", type: "象形", s: "像一只乌龟，有头、背甲、足和尾。" },
+  { c: "虎", py: "hǔ", m: "老虎", cat: "animal", type: "象形", s: "像竖起来的老虎，张口露齿，身上有斑纹。" },
+  { c: "象", py: "xiàng", m: "大象", cat: "animal", type: "象形", s: "像一头大象，突出它长长的鼻子。" },
+  { c: "犬", py: "quǎn", m: "狗", cat: "animal", type: "象形", s: "像竖写的狗，腹部瘦长，尾巴向上卷起。" },
+  { c: "鹿", py: "lù", m: "鹿", cat: "animal", type: "象形", s: "像一头鹿，头顶有枝杈状的鹿角。" },
+  { c: "燕", py: "yàn", m: "燕子", cat: "animal", type: "象形", s: "像展翅飞翔的燕子，有剪刀般的尾巴。" },
+  { c: "虫", py: "chóng", m: "虫 / 蛇", cat: "animal", type: "象形", s: "像一条昂首的蛇，本义为毒蛇（虺），后泛指虫类。" },
+
+  { c: "木", py: "mù", m: "树木", cat: "plant", type: "象形", s: "像一棵树，上有树枝，下有树根。" },
+  { c: "禾", py: "hé", m: "谷子", cat: "plant", type: "象形", s: "像成熟的谷子，沉甸甸的穗子向一侧垂下。" },
+  { c: "竹", py: "zhú", m: "竹子", cat: "plant", type: "象形", s: "像两枝下垂的竹叶。" },
+  { c: "米", py: "mǐ", m: "米粒", cat: "plant", type: "象形", s: "像散落的谷粒，中间一横把米粒隔开。" },
+  { c: "果", py: "guǒ", m: "果实", cat: "plant", type: "象形", s: "像树上结满了圆圆的果实。" },
+  { c: "林", py: "lín", m: "树林", cat: "plant", type: "会意", s: "两「木」相并，树木成林。" },
+
+  { c: "车", t: "車", py: "chē", m: "车", cat: "object", type: "象形", s: "像俯视的马车，有车轮、车轴和车辕。" },
+  { c: "舟", py: "zhōu", m: "船", cat: "object", type: "象形", s: "像一只独木小船。" },
+  { c: "刀", py: "dāo", m: "刀", cat: "object", type: "象形", s: "像一把有刀柄、刀背和刀刃的刀。" },
+  { c: "弓", py: "gōng", m: "弓", cat: "object", type: "象形", s: "像一张弯曲的弓。" },
+  { c: "门", t: "門", py: "mén", m: "门", cat: "object", type: "象形", s: "像两扇对开的门。" },
+  { c: "网", py: "wǎng", m: "网", cat: "object", type: "象形", s: "像张开的网，两侧是支撑的木杆，中间是交错的网绳。" },
+  { c: "鼎", py: "dǐng", m: "鼎", cat: "object", type: "象形", s: "像有双耳、圆腹、三足的鼎，是古代的炊器与国之重器。" },
+  { c: "册", t: "冊", py: "cè", m: "书册", cat: "object", type: "象形", s: "像用绳子编连起来的一排竹简——最早的「书」。" },
+  { c: "衣", py: "yī", m: "衣服", cat: "object", type: "象形", s: "像上衣的领口与左右交叠的衣襟。" },
+];
