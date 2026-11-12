@@ -217,7 +217,7 @@
       <div class="fit dash">
         <header class="top">
           <div class="brand"><span class="seal">字</span>字源</div>
-          <label class="search">${ICON.search}<input id="q" placeholder="查字：汉字、拼音或含义" autocomplete="off"></label>
+          <label class="search">${ICON.search}<input id="q" placeholder="汉字或拼音" autocomplete="off"></label>
           <button class="icon-btn" id="randomBtn" title="随机一字">${ICON.dice}</button>
           ${fsBtn()}
         </header>
@@ -362,7 +362,7 @@
       <div class="detail-bg"></div>
       <header class="detail-top">
         <a class="back-link" href="#/${page === "home" ? "" : page}">${ICON.back}返回</a>
-        <div class="dt-title"><b>${d.c}</b><span>${d.py}${d.m ? " · " + d.m : ""}</span></div>
+        <div class="dt-title"><b>${d.c}</b><em>${d.py}</em>${d.m ? `<span>${d.m}</span>` : ""}</div>
         <button class="icon-btn fav-btn${favs.has(d.c) ? " on" : ""}" id="favBtn" aria-label="收藏">${ICON.heart}</button>
         ${fsBtn()}
       </header>
@@ -387,9 +387,13 @@
           <button class="icon-btn" id="nextStage" aria-label="下一步">${ICON.next}</button>
         </div>
         <p class="stage-desc" id="stageDesc"></p>
-        <div class="info-row" style="grid-template-columns:repeat(${cells.length},1fr)">${cells.map(([k, v]) => `<div class="info"><small>${k}</small><b>${v}</b></div>`).join("")}</div>
+        <div class="info-row" style="grid-template-columns:repeat(${cells.length},1fr)">${cells.map(([k, v], i) => `<div class="info${i === 0 ? " py" : ""}"><small>${k}</small><b>${v}</b></div>`).join("")}</div>
         ${d.s ? `<div class="block story"><h4>字源故事</h4><p>${d.s}</p></div>` : ""}
+        <div class="block forms"><h4>字形一览</h4><div class="forms-grid" style="--n:${det.stages.length}">
+          ${det.stages.map((s, i) => `<button class="fm" data-i="${i}" style="--sc:${ACCENTS[s.id]}"><i>${glyph(d, s.id)}</i><small>${s.name}</small></button>`).join("")}
+        </div></div>
       </div>`;
+    detail.classList.toggle("has-story", !!d.s);
 
     $("#favBtn").onclick = (e) => {
       const on = favs.toggle(d.c), b = e.currentTarget;
@@ -398,6 +402,11 @@
     };
     $("#modeEvo").onclick = enterEvo;
     $("#modeStroke").onclick = enterStroke;
+    $$(".fm", detail).forEach((el) => el.onclick = () => {
+      if (det.mode === "stroke") enterEvo();
+      stopPlay();
+      setStage(+el.dataset.i);
+    });
     $("#prevStage").onclick = () => step(-1);
     $("#nextStage").onclick = () => step(1);
     $("#playBtn").onclick = togglePlay;
@@ -407,8 +416,24 @@
     shell.classList.add("detail-open");
     buildTimeline();
     setStage(0);
+    layoutForms();
     setTimeout(() => { if (det.d === d && det.mode === "evo" && !det.timer && det.i === 0) togglePlay(); }, 700);
   }
+
+  // 字形一览：按面板实际尺寸挑列数，让每个字形尽量大
+  function layoutForms() {
+    const grid = $(".forms-grid", detail);
+    if (!grid || !grid.clientWidth || !grid.clientHeight) return;
+    const n = det.stages.length, W = grid.clientWidth, H = grid.clientHeight;
+    let best = n, size = 0;
+    for (let c = 1; c <= n; c++) {
+      const r = Math.ceil(n / c), s = Math.min(W / c, H / r - 20);
+      if (s > size + 0.5) { size = s; best = c; }
+    }
+    grid.style.setProperty("--fc", best);
+    grid.style.setProperty("--fr", Math.ceil(n / best));
+  }
+  window.addEventListener("resize", () => requestAnimationFrame(() => det.d && layoutForms()));
 
   function step(dir) {
     stopPlay();
@@ -448,6 +473,7 @@
     $(".tl-fill", detail).style.width = `calc((100% - 22px) * ${n <= 1 ? 0 : i / (n - 1)})`;
     $$(".tl-node", detail).forEach((node, k) => { node.classList.toggle("active", k === i); node.classList.toggle("done", k < i); });
     $$(".tl-labels span", detail).forEach((node, k) => node.classList.toggle("active", k === i));
+    $$(".fm", detail).forEach((node, k) => node.classList.toggle("on", k === i));
     $("#caption").innerHTML = `<div class="sc-name">${s.name}</div><div class="sc-era">${s.era} · ${s.year}</div>`;
     $("#stageDesc").textContent = s.desc;
   }
@@ -478,6 +504,7 @@
   function enterEvo() {
     if (!det.d || det.mode === "evo") return;
     det.mode = "evo";
+    det.strokeN = 0;
     stopPlay();
     $("#strokeBoard").classList.remove("on");
     $("#strokeBoard").innerHTML = "";
