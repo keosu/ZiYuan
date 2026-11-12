@@ -285,6 +285,7 @@ em { font-style: normal; }
 .block { min-height: 0; overflow: hidden; padding: 8px 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
 .block h4 { margin: 0 0 4px; font-family: var(--serif); font-size: 13px; letter-spacing: 3px; display: flex; align-items: center; gap: 7px; }
 .block h4::before { content: ""; width: 3px; height: 12px; border-radius: 2px; background: var(--accent); }
+.story { align-self: start; max-height: 100%; }
 .story p { margin: 0; font-size: 13px; line-height: 1.65; color: rgba(243,236,224,.82);
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 
